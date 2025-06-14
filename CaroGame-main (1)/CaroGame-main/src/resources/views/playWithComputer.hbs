@@ -1,0 +1,360 @@
+<body class="pwc">
+<div class="pwc-game-container">
+    <div class="pwc-header">
+        <a class="pwc-title" href="/">Caro Game</a>
+        <div class="pwc-controls">
+            <button id="undo">Undo</button>
+            <button id="expand">Expand</button>
+            <button id="new-game">New Game</button>
+            <a href="/play/playWithFriend"><button id="person">Play with friend</button></a>
+        </div>
+    </div>
+    <div class="pwc-board-wrapper">
+        <div class="pwc-side-background left-side"></div>
+        <div class="pwc-board-container">
+            <div class="pwc-board" id="board"></div>
+        </div>
+        <div class="pwc-side-background right-side"></div>
+    </div>
+</div>
+
+<div id="winnerMessage" class="winner-message" style="display: none;">
+  <div class="victory-text">🏆 WINNER 🏆</div>
+  <div id="playerName" class="player-name"></div>
+  <div class="button-group">
+    <button class="winner-button" onclick="hideWinnerMessage()">🔁 Play Again</button>
+    <button class="winner-button" onclick="goToMenu()">🏠 Menu</button>
+  </div>
+</div>
+<div id="winnerOverlay" class="winner-overlay" style="display: none;"></div>
+</body>
+<script>
+  const board = document.getElementById('board');
+  const undoBtn = document.getElementById('undo');
+  const expandBtn = document.getElementById('expand');
+  const newGameBtn = document.getElementById('new-game');
+
+  let currentPlayer = 'X';
+  let boardSize = 15;
+  let boardState = {};
+  const moveHistory = [];
+  let playWithAl = true;
+
+  function initializeBoard() {
+    board.innerHTML = '';
+    boardState = {};
+    for (let row = 0; row < boardSize; row++) {
+      for (let col = 0; col < boardSize; col++) {
+        createCell(row, col);
+      }
+    }
+    updateGridStyle();
+    moveHistory.length = 0;
+  }
+
+  function createCell(row, col) {
+    const cellId = `${row},${col}`;
+    if (boardState[cellId] === undefined) {
+      const cell = document.createElement('div');
+      cell.classList.add('cell');
+      cell.dataset.row = row;
+      cell.dataset.col = col;
+      cell.id = `cell-${row}-${col}`;
+      cell.addEventListener('click', () => handleCellClick(cell, row, col));
+      board.appendChild(cell);
+      boardState[cellId] = null;
+    }
+  }
+
+  function handleCellClick(cell, row, col) {
+    if (boardState[`${row},${col}`] === null) {
+      boardState[`${row},${col}`] = currentPlayer;
+      cell.textContent = currentPlayer;
+      cell.classList.add(currentPlayer.toLowerCase());
+      moveHistory.push({ row, col, player: currentPlayer });
+
+      if (checkWin(row, col, currentPlayer)) {
+        setTimeout(() => {
+         showWinner(currentPlayer);
+          newGame();
+        }, 10);
+        return;
+      }
+
+      currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+
+      if(playWithAl && currentPlayer === 'O') {
+        setTimeout(alMove, 200);
+      }
+    }
+  }
+
+  function alMove() {
+    let bestMove = findBestMove('O');
+    if( !bestMove ) return;
+
+    const { row, col } = bestMove;
+    const cell = document.getElementById(`cell-${row}-${col}`);
+    if (cell) handleCellClick(cell, row, col);
+  }
+
+function findBestMove(player) {
+  let bestScore = -Infinity;
+  let bestMove = null;
+
+  const moves = getAvailableMoves();
+  for (const move of moves) {
+    const key = `${move.row},${move.col}`;
+    boardState[key] = player;
+
+    const score = minimax(2, false, -Infinity, Infinity); // depth có thể tăng lên
+
+    boardState[key] = null;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMove = move;
+    }
+  }
+
+  return bestMove;
+}
+
+// hàm lấy các bước di chuyển
+function getAvailableMoves() {
+  const moves = []
+  for(let row = 0; row < boardSize; row++) {
+    for(let col = 0; col < boardSize; col++) {
+      const key = `${row},${col}`;
+      if(boardState[key] === null && hasNeighbor(row, col)) {
+        moves.push({ row, col });
+      }
+    }
+  }
+  return moves;
+}
+
+// Kiểm tra có ô xung quanh đã đánh chưa 
+function hasNeighbor(row, col) {
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      if (dx === 0 && dy === 0) continue;
+      const r = row + dx;
+      const c = col + dy;
+      if (boardState[`${r},${c}`]) return true;
+    }
+  }
+  return false;
+}
+
+// Hàm đánh giá độ thông minh
+function evaluateBoard(player) {
+  const lines = getLines();
+  let score = 0;
+  for ( const line of lines ) {
+    const lineStr = line.map(cell => boardState[cell] || '.').join('');
+    score += evaluateLine(lineStr, player);
+  }
+  return score
+}
+
+function evaluateLine(lineStr, player) {
+  const opponent = player === 'O' ? 'X' : 'O';
+  if (lineStr.includes(opponent)) return 0;
+
+  const count = (lineStr.match(new RegExp(player, 'g')) || []).length;
+  if (count === 5) return 10000;
+  if (count === 4) return 1000;
+  if (count === 3) return 100;
+  if (count === 2) return 10;
+  return 1;
+}
+
+function getLines() {
+  const lines = [];
+  const directions = [
+    { dx: 0, dy: 1 },  // ngang
+    { dx: 1, dy: 0 },  // dọc
+    { dx: 1, dy: 1 },  // chéo xuôi
+    { dx: 1, dy: -1 }  // chéo ngược
+  ];
+  for (let row = 0; row < boardSize; row++) {
+    for (let col = 0; col < boardSize; col++) {
+      for (const { dx, dy } of directions) {
+        const line = [];
+        for (let i = 0; i < 5; i++) {
+          const r = row + dx * i;
+          const c = col + dy * i;
+          if (r >= 0 && r < boardSize && c >= 0 && c < boardSize) {
+            line.push(`${r},${c}`);
+          }
+        }
+        if (line.length === 5) lines.push(line);
+      }
+    }
+  }
+
+  return lines;
+}
+
+// hàm minimax
+function minimax(depth, isMaximizing, alpha, beta) {
+  if (depth === 0) {
+    return evaluateBoard('O') - evaluateBoard('X');
+  }
+
+  const moves = getAvailableMoves();
+  if (moves.length === 0) return 0;
+
+  let bestScore = isMaximizing ? -Infinity : Infinity;
+
+  for (const move of moves) {
+    const key = `${move.row},${move.col}`;
+    boardState[key] = isMaximizing ? 'O' : 'X';
+
+    const score = minimax(depth - 1, !isMaximizing, alpha, beta);
+
+    boardState[key] = null;
+
+    if (isMaximizing) {
+      bestScore = Math.max(bestScore, score);
+      alpha = Math.max(alpha, score);
+    } else {
+      bestScore = Math.min(bestScore, score);
+      beta = Math.min(beta, score);
+    }
+
+    if (beta <= alpha) break;
+  }
+
+  return bestScore;
+}
+
+function undoMove() {
+  if (moveHistory.length > 0) {
+    const lastMove = moveHistory.pop();
+    const cellId = `${lastMove.row},${lastMove.col}`;
+    boardState[cellId] = null;
+
+    const cell = document.getElementById(`cell-${lastMove.row}-${lastMove.col}`);
+    if (cell) {
+      cell.textContent = '';
+      cell.classList.remove(lastMove.player.toLowerCase());
+    }
+    currentPlayer = lastMove.player;
+  }
+}
+
+  function expandBoard() {
+    const oldSize = boardSize;
+    boardSize = oldSize + 1;
+
+    const currentCells = {};
+    for (let key in boardState) {
+      if (boardState[key] !== null) {
+        currentCells[key] = boardState[key];
+      }
+    }
+
+    board.innerHTML = '';
+    boardState = {};
+
+    for (let row = 0; row < boardSize; row++) {
+      for (let col = 0; col < boardSize; col++) {
+        createCell(row, col);
+      }
+    }
+
+    for (let key in currentCells) {
+      const [row, col] = key.split(',').map(Number);
+      const cell = document.getElementById(`cell-${row}-${col}`);
+      if (cell) {
+        cell.textContent = currentCells[key];
+        cell.classList.add(currentCells[key].toLowerCase());
+        boardState[key] = currentCells[key];
+      }
+    }
+
+    updateGridStyle();
+  }
+
+  function newGame() {
+    boardSize = 15;
+    initializeBoard();
+    currentPlayer = 'X';
+  }
+
+  // cập nhật số ô trong bảng
+  function updateGridStyle() {
+    const containerSize = 560;
+    const cellSize = Math.floor((containerSize - (boardSize - 1) * 2) / boardSize);
+
+    board.style.gridTemplateColumns = `repeat(${boardSize}, ${cellSize}px)`;
+    board.style.gridTemplateRows = `repeat(${boardSize}, ${cellSize}px)`;
+
+    const cells = document.querySelectorAll('.cell');
+    cells.forEach(cell => {
+      cell.style.width = `${cellSize}px`;
+      cell.style.height = `${cellSize}px`;
+      cell.style.fontSize = `${Math.max(12, Math.floor(cellSize * 0.6))}px`;
+    });
+  }
+
+  undoBtn.addEventListener('click', undoMove);
+  expandBtn.addEventListener('click', expandBoard);
+  newGameBtn.addEventListener('click', newGame);
+
+  // Kiểm tra chiến thắng
+  function checkWin(row, col, player) {
+    const directions = [
+      { dx: 0, dy: 1 },  // ngang
+      { dx: 1, dy: 0 },  // dọc
+      { dx: 1, dy: 1 },  // chéo
+      { dx: 1, dy: -1},  // chéo
+    ]
+
+    for (const { dx, dy } of directions) {
+      let count = 1;
+
+      // Kiểm tra 1 phía 
+      let i = 1;
+      while ( boardState[`${row + dx * i},${col + dy * i}`] === player) {
+        count++;
+        i++;
+      }
+
+      // Kiểm tra phía ngược lại
+      i = 1;
+      while( boardState[`${row - dx * i},${col - dy * i}`] === player ) {
+        count++;
+        i++;
+      }
+
+      if(count >= 5) {
+        setTimeout(() => {
+                showWinner(player);
+            }, 10);
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  initializeBoard();
+ // hương thêm
+ function showWinner(player) {
+  const playerName = document.getElementById('playerName');
+  playerName.textContent = `PLAYER ${player}`;
+  document.getElementById('winnerMessage').style.display = 'block';
+}
+function hideWinnerMessage() {
+  document.getElementById('board').style.display = 'grid'; 
+  document.getElementById('winnerMessage').style.display = "none";
+  newGame();
+}
+function goToMenu() {
+  window.location.href = "/";
+}
+
+</script>

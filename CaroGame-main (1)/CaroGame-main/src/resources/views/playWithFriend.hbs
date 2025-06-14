@@ -1,0 +1,212 @@
+
+<body class="pwf">
+<div class="pwf-game-container">
+    <div class="pwf-header">
+        <a href="/" class="pwf-title">Caro Game</a>
+        <div class="pwf-controls">
+            <button id="undo">Undo</button>
+            <button id="expand">Expand</button>
+            <button id="new-game">New Game</button>
+            <a href="/play/playWithComputer"><button id="computer-al">Play with Computer</button></a>
+        </div>
+    </div>
+    <div class="pwf-board-wrapper">
+        <div class="pwf-side-background left-side"></div>
+        <div class="pwf-board-container">
+            <div class="pwf-board" id="board"></div>
+        </div>
+        <div class="pwf-side-background right-side"></div>
+    </div>
+>>>>>>> 47bb114cbd7fb399f79a68230ccd2f5dc767d559
+</div>
+<div id="winnerMessage" class="winner-message" style="display: none;">
+  <div class="victory-text">🏆 WINNER 🏆</div>
+  <div id="playerName" class="player-name"></div>
+  <div class="button-group">
+    <button class="winner-button" onclick="hideWinnerMessage()">🔁 Play Again</button>
+    <button class="winner-button" onclick="goToMenu()">🏠 Menu</button>
+  </div>
+</div>
+<div id="winnerOverlay" class="winner-overlay" style="display: none;"></div>
+</body>
+
+<script>
+  const board = document.getElementById('board');
+  const undoBtn = document.getElementById('undo');
+  const expandBtn = document.getElementById('expand');
+  const newGameBtn = document.getElementById('new-game');
+
+  let currentPlayer = 'X';
+  let boardSize = 15;
+  let boardState = {};
+  const moveHistory = [];
+
+  function initializeBoard() {
+    board.innerHTML = '';
+    boardState = {};
+    for (let row = 0; row < boardSize; row++) {
+      for (let col = 0; col < boardSize; col++) {
+        createCell(row, col);
+      }
+    }
+    updateGridStyle();
+    moveHistory.length = 0;
+  }
+
+  function createCell(row, col) {
+    const cellId = `${row},${col}`;
+    if (boardState[cellId] === undefined) {
+      const cell = document.createElement('div');
+      cell.classList.add('cell');
+      cell.dataset.row = row;
+      cell.dataset.col = col;
+      cell.id = `cell-${row}-${col}`;
+      cell.addEventListener('click', () => handleCellClick(cell, row, col));
+      board.appendChild(cell);
+      boardState[cellId] = null;
+    }
+  }
+
+  function handleCellClick(cell, row, col) {
+    if (boardState[`${row},${col}`] === null) {
+      boardState[`${row},${col}`] = currentPlayer;
+      cell.textContent = currentPlayer;
+      cell.classList.add(currentPlayer.toLowerCase());
+      moveHistory.push({ row, col, player: currentPlayer });
+
+      if (checkWin(row, col, currentPlayer)) {
+        setTimeout(() => {
+         showWinner(currentPlayer);
+          newGame();
+        }, 10);
+        return;
+      }
+
+      currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+    }
+  }
+
+  function undoMove() {
+    if (moveHistory.length > 0) {
+      const lastMove = moveHistory.pop();
+      const cellId = `${lastMove.row},${lastMove.col}`;
+      boardState[cellId] = null;
+
+      const cell = document.getElementById(`cell-${lastMove.row}-${lastMove.col}`);
+      if (cell) {
+        cell.textContent = '';
+        cell.classList.remove(lastMove.player.toLowerCase());
+      }
+
+      currentPlayer = lastMove.player;
+    }
+  }
+
+  function expandBoard() {
+    const oldSize = boardSize;
+    boardSize = oldSize + 1;
+
+    const currentCells = {};
+    for (let key in boardState) {
+      if (boardState[key] !== null) {
+        currentCells[key] = boardState[key];
+      }
+    }
+
+    board.innerHTML = '';
+    boardState = {};
+
+    for (let row = 0; row < boardSize; row++) {
+      for (let col = 0; col < boardSize; col++) {
+        createCell(row, col);
+      }
+    }
+
+    for (let key in currentCells) {
+      const [row, col] = key.split(',').map(Number);
+      const cell = document.getElementById(`cell-${row}-${col}`);
+      if (cell) {
+        cell.textContent = currentCells[key];
+        cell.classList.add(currentCells[key].toLowerCase());
+        boardState[key] = currentCells[key];
+      }
+    }
+
+    updateGridStyle();
+  }
+
+  function newGame() {
+    boardSize = 15;
+    initializeBoard();
+    currentPlayer = 'X';
+  }
+
+  function updateGridStyle() {
+    const containerSize = 560;
+    const cellSize = Math.floor((containerSize - (boardSize - 1) * 2) / boardSize);
+
+    board.style.gridTemplateColumns = `repeat(${boardSize}, ${cellSize}px)`;
+    board.style.gridTemplateRows = `repeat(${boardSize}, ${cellSize}px)`;
+
+    const cells = document.querySelectorAll('.cell');
+    cells.forEach(cell => {
+      cell.style.width = `${cellSize}px`;
+      cell.style.height = `${cellSize}px`;
+      cell.style.fontSize = `${Math.max(12, Math.floor(cellSize * 0.6))}px`;
+    });
+  }
+
+  undoBtn.addEventListener('click', undoMove);
+  expandBtn.addEventListener('click', expandBoard);
+  newGameBtn.addEventListener('click', newGame);
+
+  function checkWin(row, col, player) {
+    const directions = [
+      { dx: 0, dy: 1 },  // ngang
+      { dx: 1, dy: 0 },  // dọc
+      { dx: 1, dy: 1 },  // chéo
+      { dx: 1, dy: -1},  // chéo
+    ]
+
+    for (const { dx, dy } of directions) {
+      let count = 1;
+
+      // Kiểm tra 1 phía 
+      let i = 1;
+      while ( boardState[`${row + dx * i},${col + dy * i}`] === player) {
+        count++;
+        i++;
+      }
+
+      // Kiểm tra phía ngược lại
+      i = 1;
+      while( boardState[`${row - dx * i},${col - dy * i}`] === player ) {
+        count++;
+        i++;
+      }
+
+      if(count >= 5) {
+        setTimeout(() => {
+                showWinner(player);
+            }, 10);
+        return true;
+      }
+    }
+
+    return false;
+  }
+   function showWinner(player) {
+  const playerName = document.getElementById('playerName');
+  playerName.textContent = `PLAYER ${player}`;
+  document.getElementById('winnerMessage').style.display = 'block';
+}
+function hideWinnerMessage() {
+  document.getElementById('board').style.display = 'grid'; 
+  document.getElementById('winnerMessage').style.display = "none";
+  newGame();
+}
+function goToMenu() {
+  window.location.href = "/";
+}
+  initializeBoard();
+</script>
